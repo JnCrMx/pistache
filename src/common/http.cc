@@ -495,21 +495,25 @@ namespace Pistache::Http
 
             message->body_.reserve(size);
             StreamCursor::Token chunkData(cursor);
-            const PST_SSIZE_T available = cursor.remaining();
+            const size_t available = static_cast<size_t>(std::max<PST_SSIZE_T>(0, cursor.remaining()));
+            const size_t bytesNeededForBody = size - alreadyAppendedChunkBytes;
 
-            if (available + alreadyAppendedChunkBytes < size + 2)
+            if (available < bytesNeededForBody + 2)
             {
-                cursor.advance(available);
-                message->body_.append(chunkData.rawText(), available);
-                alreadyAppendedChunkBytes += available;
+                size_t bytesToExtract = std::min(available, bytesNeededForBody);
+                if (bytesToExtract > 0) {
+                    cursor.advance(bytesToExtract);
+                    message->body_.append(chunkData.rawText(), bytesToExtract);
+                    alreadyAppendedChunkBytes += bytesToExtract;
+                }
                 return Incomplete;
             }
-            cursor.advance(size - alreadyAppendedChunkBytes);
+            cursor.advance(bytesNeededForBody);
+            message->body_.append(chunkData.rawText(), bytesNeededForBody);
+            alreadyAppendedChunkBytes += bytesNeededForBody;
 
             // trailing EOL
             cursor.advance(2);
-
-            message->body_.append(chunkData.rawText(), size - alreadyAppendedChunkBytes);
 
             return Complete;
         }
